@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>大阪ハッカソン 会場・二次会マップ</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', 'Hiragino Sans', sans-serif; background: #1a1a2e; color: #e0e0e0; }
+    #header {
+      background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+    #header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #e94560;
+    }
+    #header .subtitle {
+      font-size: 13px;
+      color: #8899aa;
+    }
+    #map { width: 100%; height: calc(100vh - 60px); }
+
+    .legend {
+      background: rgba(26, 26, 46, 0.95);
+      backdrop-filter: blur(8px);
+      padding: 14px 18px;
+      border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      font-size: 13px;
+      line-height: 1.8;
+      color: #e0e0e0;
+      max-width: 260px;
+    }
+    .legend h4 {
+      margin-bottom: 8px;
+      font-size: 14px;
+      color: #e94560;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .custom-popup .leaflet-popup-content-wrapper {
+      background: rgba(26, 26, 46, 0.96);
+      color: #e0e0e0;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      font-size: 13px;
+      border: 1px solid rgba(233, 69, 96, 0.3);
+    }
+    .custom-popup .leaflet-popup-tip {
+      background: rgba(26, 26, 46, 0.96);
+    }
+    .popup-title {
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+    .popup-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .popup-detail { line-height: 1.6; }
+    .popup-detail strong { color: #e94560; }
+    .popup-walk {
+      margin-top: 6px;
+      padding: 4px 8px;
+      background: rgba(233, 69, 96, 0.15);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>🗺️ 大阪ハッカソン 会場・二次会マップ</h1>
+    <span class="subtitle">4/9(木) ハッカソン 12:00〜18:00 / 二次会 19:00〜22:00 | 20名</span>
+  </div>
+  <div id="map"></div>
+
+  <script>
+    // ===== 地図初期化 =====
+    const map = L.map('map', { zoomControl: true }).setView([34.7055, 135.4990], 16);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      maxZoom: 19
+    }).addTo(map);
+
+    // ===== マーカーアイコン =====
+    function makeIcon(color, size = 28) {
+      return L.divIcon({
+        className: 'custom-marker',
+        html: `<div style="
+          width:${size}px; height:${size}px;
+          background:${color};
+          border: 3px solid rgba(255,255,255,0.9);
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 16px ${color}44;
+        "></div>`,
+        iconSize: [size, size],
+        iconAnchor: [size/2, size/2],
+        popupAnchor: [0, -size/2 - 4]
+      });
+    }
+
+    const ICONS = {
+      station: makeIcon('#ffd700', 32),    // 金 — 駅
+      venue:   makeIcon('#e94560', 30),     // 赤 — ハッカソン会場
+      party:   makeIcon('#4db8ff', 24),     // 青 — 二次会候補
+    };
+
+    // ===== ポイントデータ =====
+    const JR_OSAKA = [34.70260, 135.49560]; // JR大阪駅
+
+    const points = [
+      // --- 駅 ---
+      {
+        name: 'JR大阪駅',
+        lat: 34.70260, lng: 135.49560,
+        type: 'station',
+        popup: `
+          <div class="popup-title">🚉 JR大阪駅</div>
+          <div class="popup-detail">起点（徒歩距離の基準）</div>
+        `
+      },
+      {
+        name: '阪急大阪梅田駅',
+        lat: 34.70510, lng: 135.49870,
+        type: 'station',
+        popup: `
+          <div class="popup-title">🚉 阪急大阪梅田駅</div>
+          <div class="popup-detail">茶屋町口方面</div>
+        `
+      },
+      // --- ハッカソン会場 ---
+      {
+        name: 'AP大阪茶屋町',
+        lat: 34.70477, lng: 135.49961,
+        type: 'venue',
+        walk: '徒歩 約6分（JR大阪駅から）',
+        popup: `
+          <div class="popup-tag" style="background:#e94560;color:#fff;">⭐ 仮予約済</div>
+          <div class="popup-title">AP大阪茶屋町</div>
+          <div class="popup-detail">
+            <strong>N+Oルーム（41㎡）</strong><br>
+            スクール16名 / 6h ¥54,000（税別）<br>
+            ABC-MART梅田ビル 8F
+          </div>
+          <div class="popup-walk">🚶 JR大阪駅から徒歩 約6分</div>
+        `
+      },
+      // --- 二次会候補 ---
+      {
+        name: 'KICHIRI 茶屋町阪急駅前',
+        lat: 34.70577, lng: 135.49906,
+        type: 'party',
+        walk: '徒歩 約7分（JR大阪駅から）',
+        popup: `
+          <div class="popup-tag" style="background:#4db8ff;color:#fff;">二次会候補</div>
+          <div class="popup-title">KICHIRI 茶屋町阪急駅前</div>
+          <div class="popup-detail">
+            <strong>個室30名 / 最大80名</strong><br>
+            ダイニング｜雰囲気◎ 貸切対応<br>
+            e-square chayamachi 4F
+          </div>
+          <div class="popup-walk">🚶 AP茶屋町から徒歩 約1分</div>
+        `
+      },
+      {
+        name: 'シュラスコ ALEGRIA NU茶屋町店',
+        lat: 34.70697, lng: 135.49907,
+        type: 'party',
+        walk: '徒歩 約8分（JR大阪駅から）',
+        popup: `
+          <div class="popup-tag" style="background:#4db8ff;color:#fff;">二次会候補</div>
+          <div class="popup-title">ALEGRIA NU茶屋町店</div>
+          <div class="popup-detail">
+            <strong>個室20-30名</strong><br>
+            シュラスコ（ブラジル料理）｜インパクト◎<br>
+            NU茶屋町 9F
+          </div>
+          <div class="popup-walk">🚶 AP茶屋町から徒歩 約3分</div>
+        `
+      },
+      {
+        name: '土佐清水ワールド 梅田ギャザ阪急店',
+        lat: 34.70556, lng: 135.49755,
+        type: 'party',
+        walk: '徒歩 約7分（JR大阪駅から）',
+        popup: `
+          <div class="popup-tag" style="background:#4db8ff;color:#fff;">二次会候補</div>
+          <div class="popup-title">土佐清水ワールド</div>
+          <div class="popup-detail">
+            <strong>個室 最大46名</strong><br>
+            和食居酒屋｜阪急駅1分<br>
+            ギャザ阪急 3F
+          </div>
+          <div class="popup-walk">🚶 AP茶屋町から徒歩 約2分</div>
+        `
+      },
+      {
+        name: 'Factory Cafe',
+        lat: 34.70807, lng: 135.49763,
+        type: 'party',
+        walk: '徒歩 約9分（JR大阪駅から）',
+        popup: `
+          <div class="popup-tag" style="background:#4db8ff;color:#fff;">二次会候補</div>
+          <div class="popup-title">Factory Cafe</div>
+          <div class="popup-detail">
+            <strong>貸切 20-130名</strong><br>
+            カフェバー｜貸切プランあり カジュアル<br>
+            阪急かっぱ横丁
+          </div>
+          <div class="popup-walk">🚶 AP茶屋町から徒歩 約4分</div>
+        `
+      },
+      {
+        name: '炭火焼き瑞炎 梅田店',
+        lat: 34.70840, lng: 135.49722,
+        type: 'party',
+        walk: '徒歩 約10分（JR大阪駅から）',
+        popup: `
+          <div class="popup-tag" style="background:#4db8ff;color:#fff;">二次会候補</div>
+          <div class="popup-title">炭火焼き瑞炎 梅田店</div>
+          <div class="popup-detail">
+            <strong>フロア貸切 15-50名</strong><br>
+            焼き鳥・居酒屋｜フロア貸切◎<br>
+            北区芝田1-15-21
+          </div>
+          <div class="popup-walk">🚶 AP茶屋町から徒歩 約5分</div>
+        `
+      },
+    ];
+
+    // ===== マーカー配置 =====
+    points.forEach(p => {
+      L.marker([p.lat, p.lng], { icon: ICONS[p.type] })
+        .addTo(map)
+        .bindPopup(p.popup, { className: 'custom-popup', maxWidth: 280 })
+        .bindTooltip(p.name, {
+          permanent: true,
+          direction: 'top',
+          offset: [0, -18],
+          className: 'marker-label'
+        });
+    });
+
+    // ===== JR大阪駅からAP茶屋町への線 =====
+    L.polyline([JR_OSAKA, [34.70477, 135.49961]], {
+      color: '#e94560',
+      weight: 3,
+      opacity: 0.7,
+      dashArray: '8, 8'
+    }).addTo(map).bindTooltip('JR大阪駅 → AP茶屋町 約6分', {
+      permanent: true,
+      direction: 'center',
+      className: 'route-label'
+    });
+
+    // ===== 凡例 =====
+    const legend = L.control({ position: 'bottomright' });
+    legend.onAdd = function() {
+      const div = L.DomUtil.create('div', 'legend');
+      div.innerHTML = `
+        <h4>凡例</h4>
+        <div class="legend-item"><span class="legend-dot" style="background:#ffd700;"></span> 駅</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#e94560;"></span> ハッカソン会場（仮予約済）</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#4db8ff;"></span> 二次会候補</div>
+        <div style="margin-top:8px;font-size:11px;color:#8899aa;">
+          🚶 徒歩距離はJR大阪駅から<br>
+          クリックで詳細表示
+        </div>
+      `;
+      return div;
+    };
+    legend.addTo(map);
+  </script>
+
+  <!-- ラベルスタイル -->
+  <style>
+    .marker-label {
+      background: rgba(26,26,46,0.85) !important;
+      color: #e0e0e0 !important;
+      border: 1px solid rgba(233,69,96,0.3) !important;
+      border-radius: 6px !important;
+      padding: 2px 8px !important;
+      font-size: 11px !important;
+      font-weight: 600 !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+    }
+    .marker-label::before {
+      border-top-color: rgba(26,26,46,0.85) !important;
+    }
+    .route-label {
+      background: rgba(233,69,96,0.85) !important;
+      color: #fff !important;
+      border: none !important;
+      border-radius: 6px !important;
+      padding: 3px 10px !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+    }
+    .route-label::before {
+      display: none !important;
+    }
+  </style>
+</body>
+</html>
+
