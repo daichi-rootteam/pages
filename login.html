@@ -30,6 +30,7 @@
     h1 {
       font-size: 1.5rem;
       background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       margin-bottom: 0.5rem;
@@ -38,10 +39,6 @@
       color: #64748b;
       font-size: 0.875rem;
       margin-bottom: 2rem;
-    }
-    .input-group {
-      position: relative;
-      margin-bottom: 1rem;
     }
     input[type="password"] {
       width: 100%;
@@ -53,6 +50,7 @@
       font-size: 1rem;
       outline: none;
       transition: border-color 0.2s;
+      margin-bottom: 1rem;
     }
     input[type="password"]:focus {
       border-color: #60a5fa;
@@ -95,9 +93,7 @@
     <h1>Root Team Pages</h1>
     <p class="subtitle">このページは保護されています</p>
     <form id="loginForm">
-      <div class="input-group">
-        <input type="password" id="password" placeholder="パスワードを入力" autocomplete="off" autofocus>
-      </div>
+      <input type="password" id="password" placeholder="パスワードを入力" autocomplete="off" autofocus>
       <button type="submit">ログイン</button>
       <p class="error" id="error">パスワードが違います</p>
     </form>
@@ -107,18 +103,18 @@
     (function() {
       'use strict';
 
-      function simpleHash(str) {
-        var hash = 0;
-        for (var i = 0; i < str.length; i++) {
-          var c = str.charCodeAt(i);
-          hash = ((hash << 5) - hash) + c;
-          hash = hash & hash;
-        }
-        return Math.abs(hash).toString(36);
-      }
-
-      var PASS_HASH = simpleHash('rootteam');
+      // SHA-256 hash (事前計算済み。平文パスワードはコードに含まれない)
+      var EXPECTED_HASH = 'f665bc0f02f7650b45c517c4d4eb703a516af81587aeb83f4184502bf4f19999';
       var COOKIE_NAME = 'rt_auth';
+
+      // Web Crypto API で SHA-256 ハッシュ
+      async function sha256(message) {
+        var encoder = new TextEncoder();
+        var data = encoder.encode(message);
+        var hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        var hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+      }
 
       function setCookie(name, value, days) {
         var expires = '';
@@ -135,21 +131,23 @@
         return params.get('redirect') || window.location.href.replace('login.html', 'index.html');
       }
 
-      document.getElementById('loginForm').addEventListener('submit', function(e) {
+      document.getElementById('loginForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         var input = document.getElementById('password').value;
         var errorEl = document.getElementById('error');
         var container = document.querySelector('.login-container');
 
-        if (simpleHash(input) === PASS_HASH) {
+        var inputHash = await sha256(input);
+
+        if (inputHash === EXPECTED_HASH) {
           // 認証成功 → Cookie 30日間保持
-          setCookie(COOKIE_NAME, PASS_HASH, 30);
+          setCookie(COOKIE_NAME, EXPECTED_HASH, 30);
           window.location.replace(getRedirectUrl());
         } else {
           // 認証失敗
           errorEl.classList.add('show');
           container.classList.remove('shake');
-          void container.offsetWidth; // reflow
+          void container.offsetWidth;
           container.classList.add('shake');
           document.getElementById('password').value = '';
           document.getElementById('password').focus();
